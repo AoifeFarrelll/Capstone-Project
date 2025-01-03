@@ -126,6 +126,8 @@ cat("Total Discounted Costs for Combination Therapy:", total_discounted_costs2)
 
 total_life_years_gained <- total_life_years2-total_life_years1
 total_cost_difference <- total_discounted_costs2 - total_discounted_costs
+ICER <- total_cost_difference/total_life_years_gained
 
 cat("Total Life Years Gained with Combination Therapy:", total_life_years_gained)
 cat("Total Cost Difference between Therapies:", total_cost_difference)
+cat("ICER value:", ICER)
