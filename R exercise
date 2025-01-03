@@ -1,0 +1,131 @@
+tpm1 <- matrix(c(0.721, 0.202, 0.067, 0.010,
+                 0.000, 0.581, 0.407, 0.012,
+                 0.000, 0.000, 0.750, 0.250,
+                 0.000, 0.000, 0.000, 0.000),
+               nrow = 4, byrow = TRUE)
+
+intpop1 <- c(1000, 0, 0, 0)
+
+cycles1 <- 20
+
+population_over_time1 <- matrix(0, nrow = cycles1 + 1, ncol = length(intpop1))
+population_over_time1[1, ] <- intpop1
+
+for (t in 1:cycles1) {
+  population_over_time1[t + 1, ] <- population_over_time1[t, ] %*% tpm1
+}
+
+results_table1 <- data.frame(
+  Year1 = 0:cycles1,
+  A = population_over_time1[, 1],
+  B = population_over_time1[, 2],
+  C = population_over_time1[, 3],
+  D = population_over_time1[, 4]
+)
+
+print(results_table1)
+
+cost_A <- 2756 + 2278
+cost_B <- 3052 + 2278
+cost_C <- 9007 + 2278
+
+total_undiscounted_costs <- 0
+total_discounted_costs <- 0
+
+for (t in 1:cycles1) {
+  cost_t_A <- population_over_time1[t + 1, 1] * cost_A
+  cost_t_B <- population_over_time1[t + 1, 2] * cost_B
+  cost_t_C <- population_over_time1[t + 1, 3] * cost_C
+  
+  total_cost_t <- cost_t_A + cost_t_B + cost_t_C
+  
+  discount_factor <- 1 / (1.06^t)
+  discounted_cost_t <- total_cost_t * discount_factor
+  
+  total_undiscounted_costs <- total_undiscounted_costs + total_cost_t
+  total_discounted_costs <- total_discounted_costs + discounted_cost_t
+}
+
+total_life_years1 <- sum(population_over_time1[, 1:3]/1000)
+
+total_undiscounted_costs <- total_undiscounted_costs / 1000
+total_discounted_costs <- total_discounted_costs / 1000
+
+cat("Total Life Years for Monotherapy:", total_life_years1)
+cat("Total Undiscounted Costs for Monotherapy:", total_undiscounted_costs)
+cat("Total Discounted Costs for Monotherapy:", total_discounted_costs)
+
+
+
+tpm2 <- matrix(c(0.858, 0.103, 0.034, 0.005,
+                 0.000, 0.787, 0.207, 0.006,
+                 0.000, 0.000, 0.873, 0.127,
+                 0.000, 0.000, 0.000, 1.000),
+               nrow = 4, byrow = TRUE)
+
+intpop2 <- c(1000, 0, 0, 0)
+
+cycles2 <- 20
+
+population_over_time2 <- matrix(0, nrow = cycles2 + 1, ncol = length(intpop2))
+population_over_time2[1, ] <- intpop2
+
+for (t in 1:cycles2) {
+  if (t <= 2) {
+    population_over_time2[t + 1, ] <- population_over_time2[t, ] %*% tpm2  
+  } else {
+    population_over_time2[t + 1, ] <- population_over_time2[t, ] %*% tpm1  
+  }
+}
+
+results_table2 <- data.frame(
+  Year2 = 0:cycles2,
+  A = population_over_time2[, 1],
+  B = population_over_time2[, 2],
+  C = population_over_time2[, 3],
+  D = population_over_time2[, 4]
+)
+
+print(results_table2)
+
+cost_2A <- 2756 + 2278 + 2086.5
+cost_2B <- 3052 + 2278 + 2086.5
+cost_2C <- 9007 + 2278 + 2086.5
+
+total_undiscounted_costs2 <- 0
+total_discounted_costs2 <- 0
+
+for (t in 1:cycles2) {
+  if (t <= 2) {
+    cost_t_2A <- population_over_time2[t+1,1] * cost_2A
+    cost_t_2B <- population_over_time2[t+1,2] * cost_2B
+    cost_t_2C <- population_over_time2[t+1,3] * cost_2C
+    
+  } else {
+    cost_t_2A <- population_over_time2[t+1,1] * cost_A
+    cost_t_2B <- population_over_time2[t+1,2] * cost_B
+    cost_t_2C <- population_over_time2[t+1,3] * cost_C 
+  }
+  total_cost_2t <- cost_t_2A + cost_t_2B + cost_t_2C
+  
+  discount_factor2 <- 1 / (1.06^t)
+  discounted_cost_2t <- total_cost_2t * discount_factor2
+  
+  total_undiscounted_costs2 <- total_undiscounted_costs2 + total_cost_2t
+  total_discounted_costs2 <- total_discounted_costs2 + discounted_cost_2t
+}
+
+total_life_years2 <- sum(population_over_time2[, 1:3]/1000)
+
+total_undiscounted_costs2 <- total_undiscounted_costs2/1000
+total_discounted_costs2 <- total_discounted_costs2/1000
+
+cat("Total Life Years for Combination Therapy:", total_life_years2)
+cat("Total Undiscounted Costs for Combination Therapy:", total_undiscounted_costs2)
+cat("Total Discounted Costs for Combination Therapy:", total_discounted_costs2)
+
+total_life_years_gained <- total_life_years2-total_life_years1
+total_cost_difference <- total_discounted_costs2 - total_discounted_costs
+
+cat("Total Life Years Gained with Combination Therapy:", total_life_years_gained)
+cat("Total Cost Difference between Therapies:", total_cost_difference)
