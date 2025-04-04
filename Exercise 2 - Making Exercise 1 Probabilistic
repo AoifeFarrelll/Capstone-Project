@@ -1,188 +1,158 @@
-install.packages("LaplacesDemon")
+library(ggplot2)
 library(LaplacesDemon)
+set.seed(1)
 
-#1. Using a lognormal distribution for relative risk
-x1 <- rnorm(1, -0.675307,0.169737) 
-rr <- exp(x1)
-rr
+num_simulations <- 10000
+results <- data.frame(x = numeric(num_simulations), y = numeric(num_simulations))
 
-#2. Using gamma distribution for costs
-costs <- c(1701, 1774, 6948, 1055, 1278, 2059)
-se_costs <- costs  
-
-alpha <- (costs)^2 / (se_costs)^2
-beta <- (se_costs)^2 / costs
-
-probabilistic_costs <- rgamma(length(costs), shape = alpha, scale = beta)
-
-
-#3. Using beta distribution for the transition from state C to state D
-tpCC <-  rbeta(1, shape1 = 1312, shape2 = 437)
-tpCD <- 1-tpCC
-
-#4. Using Dirichlet distribution for other Transition Probabilities
-alpha <- c(1251, 350, 116, 17)  
-dirichlet_sampleA <- rdirichlet(1, alpha)
-names(dirichlet_sampleA) <- c("tpAA", "tpAB", "tpAC", "tpAD")
-
-beta <- c(731,512,15)
-dirichlet_sampleB <- rdirichlet(1,beta)
-names(dirichlet_sampleB) <- c("tpBB", "tpBC", "tpBD")
-
-dirichlet_sampleC <- c(tpCC, tpCD)
-names(dirichlet_sampleC) <- c("tpCC", "tpCD")
-
-
-
-#Creating transition matrix with probabilistic values
-tpm1 <- matrix(0, nrow = 4, ncol = 4) 
-rownames(tpm1) <- colnames(tpm1) <- c("A", "B", "C", "D")
-tpm1[1, ] <- dirichlet_sampleA
-tpm1[2, 2:4] <- dirichlet_sampleB  
-tpm1[3, 3:4] <- dirichlet_sampleC 
-tpm1[4, ] <- 0 
-
-print(tpm1)
-
-
-#Adapted from first exercise
-intpop1 <- c(1000, 0, 0, 0)
-
-cycles1 <- 20
-
-population_over_time1 <- matrix(0, nrow = cycles1 + 1, ncol = length(intpop1))
-population_over_time1[1, ] <- intpop1
-
-for (t in 1:cycles1) {
-  population_over_time1[t + 1, ] <- population_over_time1[t, ] %*% tpm1
+for (sim in 1:num_simulations) {
+  
+  x1 <- rnorm(1, -0.675307,0.169737) 
+  rr <- exp(x1)
+  
+  costs <- c(1701, 1774, 6948, 1055, 1278, 2059)
+  se_costs <- costs  
+  
+  alpha <- (costs)^2 / (se_costs)^2
+  beta <- (se_costs)^2 / costs
+  
+  probabilistic_costs <- rgamma(length(costs), shape = alpha, scale = beta)
+  
+  tpCC <-  rbeta(1, shape1 = 1312, shape2 = 437)
+  tpCD <- 1-tpCC
+  
+  alpha <- c(1251, 350, 116, 17)  
+  dirichlet_sampleA <- rdirichlet(1, alpha)
+  
+  beta <- c(731,512,15)
+  dirichlet_sampleB <- rdirichlet(1,beta)
+  
+  dirichlet_sampleC <- c(tpCC, tpCD)
+  
+  
+  tpm1 <- matrix(0, nrow = 4, ncol = 4) 
+  rownames(tpm1) <- colnames(tpm1) <- c("A", "B", "C", "D")
+  tpm1[1, ] <- dirichlet_sampleA
+  tpm1[2, 2:4] <- dirichlet_sampleB  
+  tpm1[3, 3:4] <- dirichlet_sampleC 
+  tpm1[4, ] <- 0 
+  
+  
+  intpop1 <- c(1000, 0, 0, 0)
+  cycles1 <- 20
+  population_over_time1 <- matrix(0, nrow = cycles1 + 1, ncol = length(intpop1))
+  population_over_time1[1, ] <- intpop1
+  for (t in 1:cycles1) {
+    population_over_time1[t + 1, ] <- population_over_time1[t, ] %*% tpm1
+  }
+  
+  total_life_years1 <- sum(population_over_time1[, 1:3]/1000)
+  
+  
+  cost_A <- probabilistic_costs[1] + probabilistic_costs[4] + 2278
+  cost_B <- probabilistic_costs[2] + probabilistic_costs[5] + 2278
+  cost_C <- probabilistic_costs[3] + probabilistic_costs[6] + 2278
+  
+  total_discounted_costs <- 0
+  for (t in 1:cycles1) {
+    total_cost_t <- sum(population_over_time1[t + 1, 1:3] * c(cost_A, cost_B, cost_C))
+    total_discounted_costs <- total_discounted_costs + total_cost_t / (1.06^t)
+  }
+  total_discounted_costs <- total_discounted_costs / 1000
+  
+  tpm2 <- tpm1 * rr
+  for (i in 1:3) {
+    non_zero <- which(tpm1[i, ] > 0)
+    if (length(non_zero) > 0) {
+      first_index <- non_zero[1]
+      tpm2[i, first_index] <- 1 - sum(tpm2[i, -first_index])
+    }
+  }
+  tpm2[4, ] <- 0  
+  
+  intpop2 <- c(1000, 0, 0, 0)
+  cycles2 <- 20
+  population_over_time2 <- matrix(0, nrow = cycles2 + 1, ncol = length(intpop2))
+  population_over_time2[1, ] <- intpop2
+  for (t in 1:cycles2) {
+    if (t <= 2) {
+      population_over_time2[t + 1, ] <- population_over_time2[t, ] %*% tpm2  
+    } else {
+      population_over_time2[t + 1, ] <- population_over_time2[t, ] %*% tpm1  
+    }
+  }
+  
+  total_life_years2 <- sum(population_over_time2[, 1:3]/1000)
+  
+  total_discounted_costs2 <- 0
+  for (t in 1:cycles2) {
+    cost_t_2 <- if (t <= 2) {
+      sum(population_over_time2[t+1,1:3] * (c(cost_A, cost_B, cost_C) + 2086.5))
+    } else {
+      sum(population_over_time2[t+1,1:3] * c(cost_A, cost_B, cost_C))
+    }
+    total_discounted_costs2 <- total_discounted_costs2 + cost_t_2 / (1.06^t)
+  }
+  total_discounted_costs2 <- total_discounted_costs2 / 1000
+  
+  
+  total_life_years_gained <- total_life_years2 - total_life_years1
+  total_cost_difference <- total_discounted_costs2 - total_discounted_costs
+  
+  
+  results[sim, ] <- c(total_life_years_gained, total_cost_difference)
 }
 
-results_table1 <- data.frame(
-  Year1 = 0:cycles1,
-  A = population_over_time1[, 1],
-  B = population_over_time1[, 2],
-  C = population_over_time1[, 3],
-  D = population_over_time1[, 4]
+ggplot(results, aes(x = x, y = y)) +
+  geom_point(color = "black", size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey") +
+  stat_ellipse(level = 0.90, color = "red", linewidth = 1) +
+  stat_ellipse(level = 0.95, color = "green", linewidth = 1) +
+  stat_ellipse(level = 0.99, color = "blue", linewidth = 1) +
+  annotate("text", x = max(results$x) * 0.1, y = max(results$y) * 0.9, 
+           label = "90% CI", color = "red", size = 4, fontface = "bold") +
+  annotate("text", x = max(results$x) * 0.1, y = max(results$y) * 0.8, 
+           label = "95% CI", color = "green", size = 4, fontface = "bold") +
+  annotate("text", x = max(results$x) * 0.1, y = max(results$y) * 0.7, 
+           label = "99% CI", color = "blue", size = 4, fontface = "bold") +
+  
+  labs(title = "Cost-Effectiveness Plane", x = "Total Life Years Gained",
+       y = "Total Cost Difference") +
+  theme_minimal()
+
+results$ICER <- results$y / results$x 
+
+cat("Median ICER value:", median(results$ICER))
+
+ggplot(results, aes(x = ICER)) +
+  geom_histogram(binwidth = 1000, fill = "blue", color = "black", alpha = 0.7) +
+  geom_vline(xintercept = median(results$ICER), color = "red", linewidth = 1, 
+             linetype = "dashed") +
+  labs(title = "Distribution of ICER Values", x = "ICER (£ per Life-Year Gained)", 
+       y = "Frequency") +
+  theme_minimal()
+
+lambda_values <- seq(0, 25000, by = 1000)
+
+ceac_probs <- numeric(length(lambda_values))
+
+for (i in seq_along(lambda_values)) {
+  lambda <- lambda_values[i]
+  nmb <- lambda * results$x - results$y
+  ceac_probs[i] <- mean(nmb > 0)
+}
+
+ceac_df <- data.frame(
+  Lambda = lambda_values,
+  Probability = ceac_probs
 )
 
-print(results_table1)
-
-cost_A <- probabilistic_costs[1] + probabilistic_costs[4] + 2278
-cost_B <- probabilistic_costs[2] + probabilistic_costs[5] + 2278
-cost_C <- probabilistic_costs[3] + probabilistic_costs[6] + 2278
-
-
-total_undiscounted_costs <- 0
-total_discounted_costs <- 0
-
-for (t in 1:cycles1) {
-  cost_t_A <- population_over_time1[t + 1, 1] * cost_A
-  cost_t_B <- population_over_time1[t + 1, 2] * cost_B
-  cost_t_C <- population_over_time1[t + 1, 3] * cost_C
-  
-  total_cost_t <- cost_t_A + cost_t_B + cost_t_C
-  
-  discount_factor <- 1 / (1.06^t)
-  discounted_cost_t <- total_cost_t * discount_factor
-  
-  total_undiscounted_costs <- total_undiscounted_costs + total_cost_t
-  total_discounted_costs <- total_discounted_costs + discounted_cost_t
-}
-
-total_life_years1 <- sum(population_over_time1[, 1:3]/1000)
-
-total_undiscounted_costs <- total_undiscounted_costs / 1000
-total_discounted_costs <- total_discounted_costs / 1000
-
-cat("Total Life Years for Monotherapy:", total_life_years1)
-cat("Total Undiscounted Costs for Monotherapy:", total_undiscounted_costs)
-cat("Total Discounted Costs for Monotherapy:", total_discounted_costs)
-
-tpm2 <- tpm1 * rr
-
-row_sums <- rowSums(tpm2) 
-
-for (i in 1:3) 
-{
-  non_zero <- which(tpm1[i, ] > 0)
-  
-  if (length(non_zero) > 0) {
-    first_index <- non_zero[1]
-    tpm2[i, first_index] <- 1 - sum(tpm2[i, -first_index])
-  }
-}
-
-tpm2[4, ] <- 0  
-
-print(tpm2)
-
-
-intpop2 <- c(1000, 0, 0, 0)
-
-cycles2 <- 20
-
-population_over_time2 <- matrix(0, nrow = cycles2 + 1, ncol = length(intpop2))
-population_over_time2[1, ] <- intpop2
-
-for (t in 1:cycles2) {
-  if (t <= 2) {
-    population_over_time2[t + 1, ] <- population_over_time2[t, ] %*% tpm2  
-  } else {
-    population_over_time2[t + 1, ] <- population_over_time2[t, ] %*% tpm1  
-  }
-}
-
-results_table2 <- data.frame(
-  Year2 = 0:cycles2,
-  A = population_over_time2[, 1],
-  B = population_over_time2[, 2],
-  C = population_over_time2[, 3],
-  D = population_over_time2[, 4]
-)
-
-print(results_table2)
-
-
-cost_2A <- probabilistic_costs[1] + probabilistic_costs[4] + 2278 + 2086.5
-cost_2B <- probabilistic_costs[2] + probabilistic_costs[5] + 2278 + 2086.5
-cost_2C <- probabilistic_costs[3] + probabilistic_costs[6] + 2278 + 2086.5
-
-total_undiscounted_costs2 <- 0
-total_discounted_costs2 <- 0
-
-for (t in 1:cycles2) {
-  if (t <= 2) {
-    cost_t_2A <- population_over_time2[t+1,1] * cost_2A
-    cost_t_2B <- population_over_time2[t+1,2] * cost_2B
-    cost_t_2C <- population_over_time2[t+1,3] * cost_2C
-    
-  } else {
-    cost_t_2A <- population_over_time2[t+1,1] * cost_A
-    cost_t_2B <- population_over_time2[t+1,2] * cost_B
-    cost_t_2C <- population_over_time2[t+1,3] * cost_C 
-  }
-  total_cost_2t <- cost_t_2A + cost_t_2B + cost_t_2C
-  
-  discount_factor2 <- 1 / (1.06^t)
-  discounted_cost_2t <- total_cost_2t * discount_factor2
-  
-  total_undiscounted_costs2 <- total_undiscounted_costs2 + total_cost_2t
-  total_discounted_costs2 <- total_discounted_costs2 + discounted_cost_2t
-}
-
-total_life_years2 <- sum(population_over_time2[, 1:3]/1000)
-
-total_undiscounted_costs2 <- total_undiscounted_costs2/1000
-total_discounted_costs2 <- total_discounted_costs2/1000
-
-cat("Total Life Years for Combination Therapy:", total_life_years2)
-cat("Total Undiscounted Costs for Combination Therapy:", total_undiscounted_costs2)
-cat("Total Discounted Costs for Combination Therapy:", total_discounted_costs2)
-
-total_life_years_gained <- total_life_years2-total_life_years1
-total_cost_difference <- total_discounted_costs2 - total_discounted_costs
-ICER <- total_cost_difference/total_life_years_gained
-
-cat("Total Life Years Gained with Combination Therapy:", total_life_years_gained)
-cat("Total Cost Difference between Therapies:", total_cost_difference)
-cat("ICER value:", ICER)
+ggplot(ceac_df, aes(x = Lambda, y = Probability)) +
+  geom_line(color = "blue", linewidth = 1.2) +
+  labs(
+    title = "Cost-Effectiveness Acceptability Curve (CEAC)",
+    x = expression(paste("Willingness to Pay (", lambda, ")")),
+    y = "Probability Cost-Effective"
+  ) +
+  theme_minimal()
