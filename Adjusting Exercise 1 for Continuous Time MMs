@@ -1,0 +1,139 @@
+library(LaplacesDemon)
+library(ggplot2)
+library(msm)
+
+set.seed(1)
+
+convert_row_to_rates <- function(p_row) {
+  q_row <- numeric(length(p_row))
+  for (j in seq_along(p_row)) {
+    if (j != which.max(p_row)) {
+      q_row[j] <- -log(1 - p_row[j])
+    }
+  }
+  q_row[which.max(p_row)] <- -sum(q_row[-which.max(p_row)])
+  return(q_row)
+}
+
+convert_P_to_Q <- function(P) {
+  Q <- matrix(0, nrow = nrow(P), ncol = ncol(P))
+  for (i in 1:nrow(P)) {
+    if (sum(P[i, ]) == 0 || P[i, i] == 1) next  
+    Q[i, ] <- convert_row_to_rates(P[i, ])
+  }
+  return(Q)
+}
+
+num_simulations <- 10000
+cycles <- 20
+results <- data.frame(x = numeric(num_simulations), y = numeric(num_simulations))
+
+for (sim in 1:num_simulations) {
+  rr <- exp(rnorm(1, -0.675307, 0.169737))
+
+  costs <- c(1701, 1774, 6948, 1055, 1278, 2059)
+  alpha <- (costs)^2 / (costs)^2
+  beta <- (costs)^2 / costs
+  probabilistic_costs <- rgamma(length(costs), shape = alpha, scale = beta)
+
+  tpCC <- rbeta(1, 1312, 437)
+  tpCD <- 1 - tpCC
+  alphaA <- c(1251, 350, 116, 17)
+  alphaB <- c(731, 512, 15)
+
+  dirichlet_sampleA <- rdirichlet(1, alphaA)
+  dirichlet_sampleB <- rdirichlet(1, alphaB)
+  dirichlet_sampleC <- c(tpCC, tpCD)
+
+
+  tpm1 <- matrix(0, 4, 4)
+  rownames(tpm1) <- colnames(tpm1) <- c("A", "B", "C", "D")
+  tpm1[1, ] <- dirichlet_sampleA
+  tpm1[2, 2:4] <- dirichlet_sampleB
+  tpm1[3, 3:4] <- dirichlet_sampleC
+  tpm1[4, ] <- c(0, 0, 0, 1) 
+
+  Q <- convert_P_to_Q(tpm1)
+
+  pop <- matrix(0, cycles + 1, 4)
+  pop[1, ] <- c(1000, 0, 0, 0)
+  for (t in 1:cycles) {
+    P <- expm::expm(Q * 1)
+    pop[t + 1, ] <- pop[t, ] %*% P
+  }
+
+  lifeyears1 <- sum(pop[, 1:3]) / 1000
+
+  # Costs
+  cost_A <- probabilistic_costs[1] + probabilistic_costs[4] + 2278
+  cost_B <- probabilistic_costs[2] + probabilistic_costs[5] + 2278
+  cost_C <- probabilistic_costs[3] + probabilistic_costs[6] + 2278
+
+  disc_costs1 <- 0
+  for (t in 1:cycles) {
+    disc_costs1 <- disc_costs1 + sum(pop[t + 1, 1:3] * c(cost_A, cost_B, cost_C)) / (1.06^t)
+  }
+  disc_costs1 <- disc_costs1 / 1000
+
+  Q_rr <- Q
+  Q_rr[1:3, 1:3] <- Q[1:3, 1:3] * rr
+  for (i in 1:3) Q_rr[i, i] <- -sum(Q_rr[i, -i])
+
+  pop2 <- matrix(0, cycles + 1, 4)
+  pop2[1, ] <- c(1000, 0, 0, 0)
+  for (t in 1:cycles) {
+    Qt <- if (t <= 2) Q_rr else Q
+    Pt <- expm::expm(Qt * 1)
+    pop2[t + 1, ] <- pop2[t, ] %*% Pt
+  }
+
+  lifeyears2 <- sum(pop2[, 1:3]) / 1000
+
+  disc_costs2 <- 0
+  for (t in 1:cycles) {
+    cost_t <- if (t <= 2) {
+      sum(pop2[t + 1, 1:3] * (c(cost_A, cost_B, cost_C) + 2086.5))
+    } else {
+      sum(pop2[t + 1, 1:3] * c(cost_A, cost_B, cost_C))
+    }
+    disc_costs2 <- disc_costs2 + cost_t / (1.06^t)
+  }
+  disc_costs2 <- disc_costs2 / 1000
+
+  results[sim, ] <- c(lifeyears2 - lifeyears1, disc_costs2 - disc_costs1)
+}
+
+ggplot(results, aes(x = x, y = y)) +
+  geom_point(color = "black", size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey") +
+  stat_ellipse(level = 0.90, color = "red", linewidth = 1) +
+  stat_ellipse(level = 0.95, color = "green", linewidth = 1) +
+  stat_ellipse(level = 0.99, color = "blue", linewidth = 1) +
+  annotate("text", x = max(results$x) * 0.1, y = max(results$y) * 0.9, label = "90% CI", color = "red") +
+  annotate("text", x = max(results$x) * 0.1, y = max(results$y) * 0.8, label = "95% CI", color = "green") +
+  annotate("text", x = max(results$x) * 0.1, y = max(results$y) * 0.7, label = "99% CI", color = "blue") +
+  labs(title = "Cost-Effectiveness Plane (Continuous-Time)", x = "Total Life-Years Gained", y = "Total Cost Difference") + theme_minimal()
+
+results$ICER <- results$y / results$x
+cat("Median ICER:", median(results$ICER, na.rm = TRUE), "\n")
+
+ggplot(results, aes(x = ICER)) +
+  geom_histogram(binwidth = 1000, fill = "blue", color = "black", alpha = 0.7) +
+  geom_vline(xintercept = median(results$ICER, na.rm = TRUE), color = "red", linetype = "dashed") +
+  labs(title = "ICER Distribution", x = "ICER (£ per Life-Year Gained)", y = "Frequency") +
+  theme_minimal()
+
+lambda_values <- seq(0, 25000, by = 1000)
+ceac_probs <- sapply(lambda_values, function(lambda) {
+  nmb <- lambda * results$x - results$y
+  mean(nmb > 0, na.rm = TRUE)
+})
+
+ceac_df <- data.frame(Lambda = lambda_values, Probability = ceac_probs)
+ggplot(ceac_df, aes(x = Lambda, y = Probability)) +
+  geom_line(color = "blue", linewidth = 1.2) +
+  labs(title = "Cost-Effectiveness Acceptability Curve (CEAC)",
+       x = expression(paste("Willingness to Pay (", lambda, ")")),
+       y = "Probability Cost-Effective") +
+  theme_minimal()
